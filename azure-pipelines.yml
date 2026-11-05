@@ -10,13 +10,22 @@ variables:
   IMAGE_REPOSITORY: todo-api
 
 steps:
-  # 1. Build and test the Spring Boot application
+  # Select Java 21 on the hosted build machine
+  - task: JavaToolInstaller@0
+    displayName: 'Set up Java 21'
+    inputs:
+      versionSpec: '21'
+      jdkArchitectureOption: 'x64'
+      jdkSourceOption: 'PreInstalled'
+
+  # Build and test the Spring Boot application
   - script: |
+      java -version
       chmod +x mvnw
       ./mvnw clean package
     displayName: 'Build and Test Spring Boot Application'
 
-  # 2. Authenticate to Azure and push the Docker image to ACR
+  # Authenticate to Azure and push the Docker image to ACR
   - task: AzureCLI@2
     displayName: 'Build and Push Docker Image to ACR'
     inputs:
