@@ -1,0 +1,48 @@
+
+trigger:
+  - dev
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  ACR_NAME: swayamspringbootacr2026
+  IMAGE_REPOSITORY: todo-api
+
+steps:
+  # 1. Build and test the Spring Boot application
+  - script: |
+      chmod +x mvnw
+      ./mvnw clean package
+    displayName: 'Build and Test Spring Boot Application'
+
+  # 2. Authenticate to Azure and push the Docker image to ACR
+  - task: AzureCLI@2
+    displayName: 'Build and Push Docker Image to ACR'
+    inputs:
+      azureSubscription: 'sc-azure-acr-push'
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        echo "Getting ACR login server..."
+        ACR_LOGIN_SERVER=$(az acr show \
+          --name "$(ACR_NAME)" \
+          --query loginServer \
+          --output tsv)
+
+        echo "ACR: $ACR_LOGIN_SERVER"
+
+        echo "Logging in to ACR..."
+        az acr login --name "$(ACR_NAME)"
+
+        echo "Building Docker image..."
+        docker build \
+          -t "$ACR_LOGIN_SERVER/$(IMAGE_REPOSITORY):$(Build.BuildId)" \
+          -t "$ACR_LOGIN_SERVER/$(IMAGE_REPOSITORY):latest" \
+          .
+
+        echo "Pushing versioned image..."
+        docker push "$ACR_LOGIN_SERVER/$(IMAGE_REPOSITORY):$(Build.BuildId)"
+
+        echo "Pushing latest image..."
+        docker push "$ACR_LOGIN_SERVER/$(IMAGE_REPOSITORY):latest"

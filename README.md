@@ -68,13 +68,19 @@ with a `Location` header, and delete returns `204`.
 
 ## Run and explore
 
-Set `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` in your environment, then run:
+To run the application against PostgreSQL, set `DB_URL`, `DB_USERNAME`, and
+`DB_PASSWORD` in your environment:
 
 ```sh
 export DB_URL=jdbc:postgresql://localhost:5432/java_demo
 export DB_USERNAME=your_database_user
 export DB_PASSWORD=your_database_password
 ./mvnw spring-boot:run
+```
+
+Tests use an in-memory H2 database and do not require PostgreSQL:
+
+```sh
 ./mvnw test
 ```
 
