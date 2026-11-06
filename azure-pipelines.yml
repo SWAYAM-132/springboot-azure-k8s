@@ -61,7 +61,13 @@ steps:
 
         echo "Successfully pushed images!"
 
-  # 4. Deploy to AKS (CD)
+  # 4. Download kubelogin
+  - task: KubeloginInstaller@0
+    displayName: 'Install kubelogin'
+    inputs:
+      kubeloginVersion: 'latest'
+
+  # 5. Deploy to AKS (CD)
   - task: KubernetesManifest@1
     displayName: 'Deploy Todo API to AKS'
     inputs:
