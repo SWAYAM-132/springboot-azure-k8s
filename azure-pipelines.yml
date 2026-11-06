@@ -60,3 +60,19 @@ steps:
         docker push "$ACR_LOGIN_SERVER/$(IMAGE_REPOSITORY):latest"
 
         echo "Successfully pushed images!"
+
+  # 4. Deploy to AKS (CD)
+  - task: KubernetesManifest@1
+    displayName: 'Deploy Todo API to AKS'
+    inputs:
+      action: deploy
+      connectionType: azureResourceManager
+      azureSubscriptionConnection: 'sc-personal-azure'
+      azureResourceGroup: 'rg-springboot-k8s-dev'
+      kubernetesCluster: 'aks-todo-dev'
+      namespace: 'todo-dev'
+      manifests: |
+        k8s/deployment.yaml
+      containers: |
+        swayamtodoacr2026-amescxfhh3g3bcde.azurecr.io/todo-api:$(Build.BuildId)
+      rolloutStatusTimeout: '180'
