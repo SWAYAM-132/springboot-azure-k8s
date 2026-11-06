@@ -68,8 +68,11 @@ with a `Location` header, and delete returns `204`.
 
 ## Run and explore
 
-To run the application against PostgreSQL, set `DB_URL`, `DB_USERNAME`, and
-`DB_PASSWORD` in your environment:
+To run the application against PostgreSQL, provide `DB_URL`, `DB_USERNAME`,
+and `DB_PASSWORD` in a `.env` file in the project root. Spring Boot loads this
+file when starting from the project directory. The file is gitignored; do not
+commit database credentials. You can also set these values as environment
+variables:
 
 ```sh
 export DB_URL=jdbc:postgresql://localhost:5432/java_demo
