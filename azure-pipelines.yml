@@ -6,11 +6,11 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
-  ACR_NAME: swayamspringbootacr2026
+  ACR_NAME: swayamtodoacr2026
   IMAGE_REPOSITORY: todo-api
 
 steps:
-  # Select Java 21 on the hosted build machine
+  # 1. Set up Java 21
   - task: JavaToolInstaller@0
     displayName: 'Set up Java 21'
     inputs:
@@ -18,21 +18,24 @@ steps:
       jdkArchitectureOption: 'x64'
       jdkSourceOption: 'PreInstalled'
 
-  # Build and test the Spring Boot application
+  # 2. Build and test Spring Boot application
   - script: |
+      set -e
       java -version
       chmod +x mvnw
-      ./mvnw clean package
+      ./mvnw clean verify
     displayName: 'Build and Test Spring Boot Application'
 
-  # Authenticate to Azure and push the Docker image to ACR
+  # 3. Authenticate to Azure and push image to ACR
   - task: AzureCLI@2
     displayName: 'Build and Push Docker Image to ACR'
     inputs:
-      azureSubscription: 'sc-azure-acr-push'
+      azureSubscription: 'sc-personal-azure'
       scriptType: bash
       scriptLocation: inlineScript
       inlineScript: |
+        set -e
+
         echo "Getting ACR login server..."
         ACR_LOGIN_SERVER=$(az acr show \
           --name "$(ACR_NAME)" \
@@ -55,3 +58,5 @@ steps:
 
         echo "Pushing latest image..."
         docker push "$ACR_LOGIN_SERVER/$(IMAGE_REPOSITORY):latest"
+
+        echo "Successfully pushed images!"
