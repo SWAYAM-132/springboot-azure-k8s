@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f5f7fb">
+    <title>Todo Desk</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #17233c;
+            --muted: #71809a;
+            --line: #e4e9f1;
+            --paper: #fff;
+            --canvas: #f5f7fb;
+            --blue: #4169e1;
+            --blue-dark: #3154c5;
+            --green: #198754;
+            --red: #c33f50;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--canvas);
+            color: var(--ink);
+            min-height: 100vh;
+        }
+
+        button, input, textarea, select { font: inherit; }
+        button { cursor: pointer; }
+
+        .topbar {
+            background: var(--paper);
+            border-bottom: 1px solid var(--line);
+            padding: 18px max(24px, calc((100% - 1120px) / 2));
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .brand { display: flex; align-items: center; gap: 12px; font-weight: 750; letter-spacing: -.03em; }
+        .brand-mark {
+            width: 36px;
+            height: 36px;
+            display: grid;
+            place-items: center;
+            border-radius: 11px;
+            color: white;
+            background: var(--blue);
+            font-size: 19px;
+        }
+
+        .api-status { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #e3a32b; }
+        .status-dot.online { background: #28a36a; }
+        .status-dot.offline { background: #d34b5b; }
+
+        main { max-width: 1120px; margin: 0 auto; padding: 46px 24px 64px; }
+        .intro { margin-bottom: 28px; }
+        .eyebrow { color: var(--blue); font-size: 12px; font-weight: 750; text-transform: uppercase; letter-spacing: .12em; }
+        h1 { margin: 8px 0; font-size: clamp(30px, 4vw, 42px); letter-spacing: -.045em; }
+        .intro p { color: var(--muted); margin: 0; max-width: 620px; line-height: 1.6; }
+
+        .layout { display: grid; grid-template-columns: minmax(270px, 340px) minmax(0, 1fr); gap: 22px; align-items: start; }
+        .panel { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 24px rgb(34 51 84 / 4%); }
+        .create-panel { padding: 24px; }
+        .panel h2 { font-size: 17px; letter-spacing: -.02em; margin: 0; }
+        .subheading { color: var(--muted); font-size: 13px; margin: 6px 0 21px; line-height: 1.5; }
+        .field { display: grid; gap: 7px; margin-bottom: 16px; }
+        label { font-size: 13px; font-weight: 650; }
+        input, textarea, select {
+            width: 100%;
+            border: 1px solid #dce3ed;
+            border-radius: 9px;
+            background: white;
+            color: var(--ink);
+            padding: 10px 12px;
+            outline: none;
+        }
+        input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgb(65 105 225 / 13%); }
+        textarea { resize: vertical; min-height: 100px; }
+        .hint { color: var(--muted); font-size: 11px; margin-top: -3px; }
+
+        .button {
+            border: 1px solid transparent;
+            border-radius: 9px;
+            padding: 9px 13px;
+            font-size: 13px;
+            font-weight: 680;
+            transition: background .15s ease, border-color .15s ease;
+        }
+        .button:disabled { opacity: .6; cursor: wait; }
+        .primary { color: white; background: var(--blue); }
+        .primary:hover:not(:disabled) { background: var(--blue-dark); }
+        .secondary { color: #394861; background: #fff; border-color: var(--line); }
+        .secondary:hover:not(:disabled) { background: #f6f8fc; }
+        .danger { color: var(--red); background: #fff; border-color: #f0d7dc; }
+        .danger:hover:not(:disabled) { background: #fff5f6; }
+        .create-button { width: 100%; padding: 11px; }
+
+        .content-panel { overflow: hidden; }
+        .toolbar { padding: 20px 22px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); }
+        .toolbar-title { display: flex; align-items: baseline; gap: 9px; }
+        .count { color: var(--muted); font-size: 12px; }
+        .toolbar-actions { display: flex; gap: 9px; align-items: center; }
+        .filter-select { width: auto; min-width: 125px; padding: 9px 32px 9px 10px; font-size: 13px; }
+        .find-row { padding: 15px 22px; border-bottom: 1px solid var(--line); background: #fbfcfe; display: flex; gap: 9px; }
+        .find-row input { max-width: 220px; }
+        .find-result { padding: 12px 22px; background: #f3f6ff; border-bottom: 1px solid var(--line); font-size: 13px; }
+        .find-result:empty { display: none; }
+        .todo-list { padding: 4px 22px; }
+        .todo-item { padding: 18px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 13px; align-items: start; }
+        .todo-item:last-child { border-bottom: 0; }
+        .todo-check { width: 18px; height: 18px; accent-color: var(--green); margin: 2px 0 0; cursor: pointer; }
+        .todo-title { font-weight: 680; overflow-wrap: anywhere; }
+        .todo-title.done { color: #8994a6; text-decoration: line-through; }
+        .todo-description { font-size: 13px; color: #53627a; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; margin-top: 5px; }
+        .todo-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; color: var(--muted); font-size: 11px; }
+        .todo-actions { display: flex; gap: 6px; }
+        .todo-actions .button { padding: 6px 9px; font-size: 12px; }
+        .empty, .loading, .error-state { padding: 42px 20px; text-align: center; color: var(--muted); font-size: 14px; }
+        .error-state { color: var(--red); }
+        .pagination { border-top: 1px solid var(--line); padding: 13px 22px; display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12px; }
+        .pagination-controls { display: flex; gap: 8px; }
+        .notice { display: none; margin-bottom: 18px; padding: 12px 14px; border-radius: 10px; font-size: 13px; line-height: 1.45; }
+        .notice.visible { display: block; }
+        .notice.success { color: #17653f; background: #eaf7ef; }
+        .notice.error { color: #a32d3d; background: #fff0f2; }
+
+        dialog { width: min(460px, calc(100% - 32px)); border: 1px solid var(--line); border-radius: 15px; padding: 24px; color: var(--ink); box-shadow: 0 22px 80px rgb(19 32 57 / 25%); }
+        dialog::backdrop { background: rgb(18 29 49 / 42%); }
+        .dialog-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .dialog-heading h2 { margin: 0; font-size: 18px; }
+        .dialog-id { color: var(--muted); font-size: 12px; margin-top: 4px; }
+        .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+        .check-field { display: flex; align-items: center; gap: 9px; margin: 4px 0; }
+        .check-field input { width: auto; }
+
+        @media (max-width: 760px) {
+            main { padding: 30px 16px 48px; }
+            .layout { grid-template-columns: 1fr; }
+            .topbar { padding: 14px 16px; }
+            .toolbar { align-items: flex-start; flex-direction: column; }
+            .toolbar-actions { width: 100%; }
+            .filter-select { flex: 1; }
+            .todo-item { grid-template-columns: 22px minmax(0, 1fr); }
+            .todo-actions { grid-column: 2; }
+        }
+        @media (max-width: 420px) {
+            .api-status span:last-child { display: none; }
+            .find-row { padding: 13px 15px; }
+            .find-row input { min-width: 0; flex: 1; }
+            .todo-list { padding-inline: 15px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand"><span class="brand-mark" aria-hidden="true">✓</span><span>Todo Desk</span></div>
+        <div class="api-status" role="status"><span class="status-dot" id="status-dot"></span><span id="status-text">Connecting to API…</span></div>
+    </header>
+
+    <main>
+        <section class="intro">
+            <div class="eyebrow">Your workspace</div>
+            <h1>Make room for what matters.</h1>
+            <p>Create and manage tasks in one place. Every task gets an ID you can use to find, update, or remove it.</p>
+        </section>
+
+        <div class="notice" id="notice" role="status" aria-live="polite"></div>
+
+        <div class="layout">
+            <section class="panel create-panel" aria-labelledby="create-heading">
+                <h2 id="create-heading">Add a task</h2>
+                <p class="subheading">A clear title is all you need to get started.</p>
+                <form id="create-form">
+                    <div class="field">
+                        <label for="new-title">Title</label>
+                        <input id="new-title" name="title" maxlength="200" required placeholder="What needs to get done?" autocomplete="off">
+                        <span class="hint">Up to 200 characters</span>
+                    </div>
+                    <div class="field">
+                        <label for="new-description">Description <span class="hint">(optional)</span></label>
+                        <textarea id="new-description" name="description" maxlength="2000" placeholder="Add a few details…"></textarea>
+                    </div>
+                    <button class="button primary create-button" type="submit">＋ Add task</button>
+                </form>
+            </section>
+
+            <section class="panel content-panel" aria-labelledby="tasks-heading">
+                <div class="toolbar">
+                    <div class="toolbar-title"><h2 id="tasks-heading">Your tasks</h2><span class="count" id="task-count"></span></div>
+                    <div class="toolbar-actions">
+                        <select class="filter-select" id="status-filter" aria-label="Filter tasks by status">
+                            <option value="">All tasks</option>
+                            <option value="false">To do</option>
+                            <option value="true">Completed</option>
+                        </select>
+                        <button class="button secondary" id="refresh-button" type="button">Refresh</button>
+                    </div>
+                </div>
+                <form class="find-row" id="find-form">
+                    <input type="number" id="find-id" min="1" step="1" aria-label="Task ID" placeholder="Enter task ID" required>
+                    <button class="button secondary" type="submit">Find by ID</button>
+                </form>
+                <div class="find-result" id="find-result" aria-live="polite"></div>
+                <div class="todo-list" id="todo-list" aria-live="polite"><div class="loading">Loading your tasks…</div></div>
+                <div class="pagination">
+                    <span id="page-label">Page 1</span>
+                    <div class="pagination-controls">
+                        <button class="button secondary" id="previous-button" type="button" disabled>Previous</button>
+                        <button class="button secondary" id="next-button" type="button" disabled>Next</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <dialog id="edit-dialog" aria-labelledby="edit-heading">
+        <form id="edit-form">
+            <div class="dialog-heading">
+                <div><h2 id="edit-heading">Edit task</h2><div class="dialog-id" id="edit-id"></div></div>
+                <button class="button secondary" id="close-dialog" type="button" aria-label="Close">✕</button>
+            </div>
+            <div class="field">
+                <label for="edit-title">Title</label>
+                <input id="edit-title" maxlength="200" required>
+            </div>
+            <div class="field">
+                <label for="edit-description">Description</label>
+                <textarea id="edit-description" maxlength="2000"></textarea>
+            </div>
+            <label class="check-field"><input id="edit-completed" type="checkbox"> Mark as completed</label>
+            <div class="dialog-actions">
+                <button class="button secondary" id="cancel-edit" type="button">Cancel</button>
+                <button class="button primary" type="submit">Save changes</button>
+            </div>
+        </form>
+    </dialog>
+
+    <script>
+        const apiUrl = "/api/todos";
+        const pageSize = 100;
+        let currentPage = 0;
+        let totalPages = 0;
+        let editingTodo = null;
+        let noticeTimer;
+
+        const todoList = document.getElementById("todo-list");
+        const notice = document.getElementById("notice");
+        const editDialog = document.getElementById("edit-dialog");
+
+        async function request(url, options = {}) {
+            const response = await fetch(url, {
+                ...options,
+                headers: { "Content-Type": "application/json", ...options.headers }
+            });
+            if (response.status === 204) return null;
+            const text = await response.text();
+            if (!response.ok) {
+                let message = `Request failed (${response.status})`;
+                try {
+                    const body = JSON.parse(text);
+                    message = body.detail || body.message || body.error || message;
+                    if (body.errors) message = Object.values(body.errors).join(" ");
+                } catch {
+                    if (text) message = text;
+                }
+                throw new Error(message);
+            }
+            return text ? JSON.parse(text) : null;
+        }
+
+        function showNotice(message, type = "success") {
+            clearTimeout(noticeTimer);
+            notice.textContent = message;
+            notice.className = `notice visible ${type}`;
+            noticeTimer = setTimeout(() => notice.classList.remove("visible"), 5000);
+        }
+
+        function setApiStatus(online, text) {
+            document.getElementById("status-dot").className = `status-dot ${online ? "online" : "offline"}`;
+            document.getElementById("status-text").textContent = text;
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? "").replace(/[&<>"']/g, character => ({
+                "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+            })[character]);
+        }
+
+        function formatDate(value) {
+            if (!value) return "—";
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
+        }
+
+        function renderTodo(todo) {
+            const statusClass = todo.completed ? "done" : "";
+            const statusText = todo.completed ? "Completed" : "To do";
+            return `
+                <article class="todo-item">
+                    <input class="todo-check" type="checkbox" data-action="toggle" data-id="${todo.id}" ${todo.completed ? "checked" : ""} aria-label="Mark task ${todo.id} ${todo.completed ? "to do" : "completed"}">
+                    <div>
+                        <div class="todo-title ${statusClass}">${escapeHtml(todo.title)}</div>
+                        ${todo.description ? `<div class="todo-description">${escapeHtml(todo.description)}</div>` : ""}
+                        <div class="todo-meta"><span>ID: ${todo.id}</span><span>${statusText}</span><span>Updated ${escapeHtml(formatDate(todo.updatedAt))}</span></div>
+                    </div>
+                    <div class="todo-actions">
+                        <button class="button secondary" type="button" data-action="edit" data-id="${todo.id}">Edit</button>
+                        <button class="button danger" type="button" data-action="delete" data-id="${todo.id}">Delete</button>
+                    </div>
+                </article>`;
+        }
+
+        async function loadTodos() {
+            todoList.innerHTML = '<div class="loading">Loading your tasks…</div>';
+            const filter = document.getElementById("status-filter").value;
+            const params = new URLSearchParams({ page: String(currentPage), size: String(pageSize), sort: "createdAt,desc" });
+            if (filter !== "") params.set("completed", filter);
+            try {
+                const page = await request(`${apiUrl}?${params}`);
+                totalPages = page.totalPages;
+                document.getElementById("task-count").textContent = `${page.totalElements} total`;
+                document.getElementById("page-label").textContent = `Page ${page.totalPages ? page.number + 1 : 0} of ${page.totalPages}`;
+                document.getElementById("previous-button").disabled = page.first;
+                document.getElementById("next-button").disabled = page.last;
+                todoList.innerHTML = page.content.length
+                    ? page.content.map(renderTodo).join("")
+                    : '<div class="empty">No tasks here yet. Add one to get started.</div>';
+                setApiStatus(true, "API connected");
+            } catch (error) {
+                todoList.innerHTML = `<div class="error-state">${escapeHtml(error.message)}<br><br>Could not load tasks. Check that the application and database are running.</div>`;
+                document.getElementById("task-count").textContent = "";
+                document.getElementById("page-label").textContent = "Page —";
+                document.getElementById("previous-button").disabled = true;
+                document.getElementById("next-button").disabled = true;
+                setApiStatus(false, "API unavailable");
+            }
+        }
+
+        document.getElementById("create-form").addEventListener("submit", async event => {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const button = form.querySelector('button[type="submit"]');
+            button.disabled = true;
+            try {
+                const todo = await request(apiUrl, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        title: form.elements.title.value.trim(),
+                        description: form.elements.description.value.trim() || null
+                    })
+                });
+                form.reset();
+                currentPage = 0;
+                await loadTodos();
+                showNotice(`Task #${todo.id} created.`);
+            } catch (error) {
+                showNotice(error.message, "error");
+            } finally {
+                button.disabled = false;
+            }
+        });
+
+        document.getElementById("find-form").addEventListener("submit", async event => {
+            event.preventDefault();
+            const id = document.getElementById("find-id").value;
+            const result = document.getElementById("find-result");
+            result.textContent = "Looking up task…";
+            try {
+                const todo = await request(`${apiUrl}/${encodeURIComponent(id)}`);
+                result.innerHTML = `<strong>Task #${todo.id}:</strong> ${escapeHtml(todo.title)} — ${todo.completed ? "Completed" : "To do"} <button class="button secondary" type="button" data-action="edit" data-id="${todo.id}">Edit</button>`;
+            } catch (error) {
+                result.textContent = error.message;
+            }
+        });
+
+        function openEdit(todo) {
+            editingTodo = todo;
+            document.getElementById("edit-id").textContent = `Task ID: ${todo.id}`;
+            document.getElementById("edit-title").value = todo.title;
+            document.getElementById("edit-description").value = todo.description || "";
+            document.getElementById("edit-completed").checked = todo.completed;
+            editDialog.showModal();
+        }
+
+        async function editTodo(id) {
+            try {
+                openEdit(await request(`${apiUrl}/${encodeURIComponent(id)}`));
+            } catch (error) {
+                showNotice(error.message, "error");
+            }
+        }
+
+        async function updateTodo(todo, changes) {
+            return request(`${apiUrl}/${encodeURIComponent(todo.id)}`, {
+                method: "PUT",
+                body: JSON.stringify(changes)
+            });
+        }
+
+        document.getElementById("edit-form").addEventListener("submit", async event => {
+            event.preventDefault();
+            if (!editingTodo) return;
+            const form = event.currentTarget;
+            const saveButton = form.querySelector('button[type="submit"]');
+            saveButton.disabled = true;
+            try {
+                await updateTodo(editingTodo, {
+                    title: document.getElementById("edit-title").value.trim(),
+                    description: document.getElementById("edit-description").value.trim() || null,
+                    completed: document.getElementById("edit-completed").checked
+                });
+                editDialog.close();
+                await loadTodos();
+                showNotice(`Task #${editingTodo.id} updated.`);
+            } catch (error) {
+                showNotice(error.message, "error");
+            } finally {
+                saveButton.disabled = false;
+            }
+        });
+
+        document.addEventListener("click", async event => {
+            const button = event.target.closest("button[data-action]");
+            if (!button) return;
+            const { action, id } = button.dataset;
+            if (action === "edit") {
+                await editTodo(id);
+            } else if (action === "delete") {
+                if (!confirm(`Delete task #${id}? This cannot be undone.`)) return;
+                button.disabled = true;
+                try {
+                    await request(`${apiUrl}/${encodeURIComponent(id)}`, { method: "DELETE" });
+                    await loadTodos();
+                    showNotice(`Task #${id} deleted.`);
+                } catch (error) {
+                    showNotice(error.message, "error");
+                    button.disabled = false;
+                }
+            }
+        });
+
+        document.getElementById("todo-list").addEventListener("change", async event => {
+            const checkbox = event.target.closest('input[data-action="toggle"]');
+            if (!checkbox) return;
+            checkbox.disabled = true;
+            try {
+                const todo = await request(`${apiUrl}/${encodeURIComponent(checkbox.dataset.id)}`);
+                await updateTodo(todo, { title: todo.title, description: todo.description, completed: checkbox.checked });
+                await loadTodos();
+            } catch (error) {
+                showNotice(error.message, "error");
+                checkbox.checked = !checkbox.checked;
+                checkbox.disabled = false;
+            }
+        });
+
+        document.getElementById("status-filter").addEventListener("change", () => {
+            currentPage = 0;
+            loadTodos();
+        });
+        document.getElementById("refresh-button").addEventListener("click", loadTodos);
+        document.getElementById("previous-button").addEventListener("click", () => {
+            if (currentPage > 0) { currentPage--; loadTodos(); }
+        });
+        document.getElementById("next-button").addEventListener("click", () => {
+            if (currentPage + 1 < totalPages) { currentPage++; loadTodos(); }
+        });
+        document.getElementById("close-dialog").addEventListener("click", () => editDialog.close());
+        document.getElementById("cancel-edit").addEventListener("click", () => editDialog.close());
+
+        loadTodos();
+    </script>
+</body>
+</html>

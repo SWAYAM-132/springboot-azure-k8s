@@ -68,6 +68,9 @@ with a `Location` header, and delete returns `204`.
 
 ## Run and explore
 
+The task management UI is available at `/`. Use it to create tasks, look up
+tasks by their generated IDs, edit or mark them complete, and delete them.
+
 To run the application against PostgreSQL, provide `DB_URL`, `DB_USERNAME`,
 and `DB_PASSWORD` in a `.env` file in the project root. Spring Boot loads this
 file when starting from the project directory. The file is gitignored; do not

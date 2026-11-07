@@ -61,13 +61,35 @@ steps:
 
         echo "Successfully pushed images!"
 
-  # 4. Download kubelogin
+  # 4. Deployment to Container Apps
+  - task: AzureCLI@2
+    displayName: 'Deploy to Azure Container Apps'
+    inputs:
+      azureSubscription: 'sc-personal-azure'
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set -e
+
+        ACR_LOGIN_SERVER=$(az acr show \
+          --name "swayamtodoacr2026" \
+          --query loginServer \
+          --output tsv)
+
+        IMAGE="$ACR_LOGIN_SERVER/todo-api:$(Build.BuildId)"
+
+        az containerapp update \
+          --name "todo-api-containerapp-dev" \
+          --resource-group "rg-springboot-k8s-dev" \
+          --image "$IMAGE"
+
+  # 5. Download kubelogin
   - task: KubeloginInstaller@0
     displayName: 'Install kubelogin'
     inputs:
       kubeloginVersion: 'latest'
 
-  # 5. Deploy to AKS (CD)
+  # 6. Deploy to AKS (CD)
   - task: KubernetesManifest@1
     displayName: 'Deploy Todo API to AKS'
     inputs:
