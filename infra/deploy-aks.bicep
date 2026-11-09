@@ -29,6 +29,14 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' existing = {
   name: 'vnet-todo-platform-ci'
   scope: networkRg
 }
+resource nonprodAksSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' existing = {
+  parent: vnet
+  name: 'snet-aks-nonprod'
+}
+resource prodAksSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' existing = {
+  parent: vnet
+  name: 'snet-aks-prod'
+}
 resource adoIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: adoIdentityName
   scope: acrRg
@@ -49,7 +57,7 @@ module nonprod './modules/aks/cluster.bicep' = if (deployNonprod) {
     location: location
     clusterName: 'aks-todo-nonprod-ci'
     dnsPrefix: 'todo-nonprod-ci'
-    subnetId: resourceId(networkResourceGroupName, 'Microsoft.Network/virtualNetworks/subnets', vnet.name, 'snet-aks-nonprod')
+    subnetId: nonprodAksSubnet.id
     podCidr: '10.240.0.0/16'
     serviceCidr: '10.250.0.0/16'
     dnsServiceIP: '10.250.0.10'
@@ -73,7 +81,7 @@ module prod './modules/aks/cluster.bicep' = if (deployProd) {
     location: location
     clusterName: 'aks-todo-prod-ci'
     dnsPrefix: 'todo-prod-ci'
-    subnetId: resourceId(networkResourceGroupName, 'Microsoft.Network/virtualNetworks/subnets', vnet.name, 'snet-aks-prod')
+    subnetId: prodAksSubnet.id
     podCidr: '10.241.0.0/16'
     serviceCidr: '10.251.0.0/16'
     dnsServiceIP: '10.251.0.10'
