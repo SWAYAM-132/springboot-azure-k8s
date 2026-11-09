@@ -53,6 +53,7 @@
             font-size: 19px;
         }
 
+        .topbar-actions { display: flex; align-items: center; gap: 14px; }
         .api-status { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 8px; }
         .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #e3a32b; }
         .status-dot.online { background: #28a36a; }
@@ -160,7 +161,10 @@
 <body>
     <header class="topbar">
         <div class="brand"><span class="brand-mark" aria-hidden="true">✓</span><span>Todo Desk</span></div>
-        <div class="api-status" role="status"><span class="status-dot" id="status-dot"></span><span id="status-text">Connecting to API…</span></div>
+        <div class="topbar-actions">
+            <div class="api-status" role="status"><span class="status-dot" id="status-dot"></span><span id="status-text">Connecting to API…</span></div>
+            <button class="button secondary" id="auth-button" type="button" disabled>Sign in</button>
+        </div>
     </header>
 
     <main>
@@ -241,6 +245,7 @@
         </form>
     </dialog>
 
+    <script src="https://alcdn.msauth.net/browser/2.39.0/js/msal-browser.min.js"></script>
     <script>
         const apiUrl = "/api/todos";
         const pageSize = 100;
@@ -248,15 +253,96 @@
         let totalPages = 0;
         let editingTodo = null;
         let noticeTimer;
+        let msalApp;
+        let authConfig;
+        let activeAccount;
 
         const todoList = document.getElementById("todo-list");
         const notice = document.getElementById("notice");
         const editDialog = document.getElementById("edit-dialog");
+        const authButton = document.getElementById("auth-button");
+
+        async function initializeAuth() {
+            try {
+                authConfig = await fetch("/api/auth/config").then(response => {
+                    if (!response.ok) throw new Error("Could not load sign-in configuration.");
+                    return response.json();
+                });
+                if (!authConfig.tenantId || !authConfig.clientId || !authConfig.apiScope || !window.msal) {
+                    throw new Error("Entra sign-in is not configured for this application.");
+                }
+                msalApp = new msal.PublicClientApplication({
+                    auth: {
+                        clientId: authConfig.clientId,
+                        authority: `https://login.microsoftonline.com/${encodeURIComponent(authConfig.tenantId)}`,
+                        redirectUri: window.location.origin
+                    },
+                    cache: { cacheLocation: "sessionStorage" }
+                });
+                await msalApp.initialize();
+                const result = await msalApp.handleRedirectPromise();
+                activeAccount = result?.account || msalApp.getAllAccounts()[0];
+                updateAuthButton();
+                authButton.disabled = false;
+                if (activeAccount) {
+                    await loadTodos();
+                } else {
+                    todoList.innerHTML = '<div class="empty">Sign in with your organization account to view your tasks.</div>';
+                    setApiStatus(true, "Sign in to continue");
+                }
+            } catch (error) {
+                todoList.innerHTML = `<div class="error-state">${escapeHtml(error.message)}</div>`;
+                setApiStatus(false, "Sign-in unavailable");
+            }
+        }
+
+        function updateAuthButton() {
+            authButton.textContent = activeAccount ? "Sign out" : "Sign in";
+            authButton.setAttribute("aria-label", activeAccount ? "Sign out" : "Sign in");
+        }
+
+        async function getAccessToken() {
+            const request = { scopes: [authConfig.apiScope], account: activeAccount };
+            try {
+                return (await msalApp.acquireTokenSilent(request)).accessToken;
+            } catch (error) {
+                if (error instanceof msal.InteractionRequiredAuthError) {
+                    return (await msalApp.acquireTokenPopup(request)).accessToken;
+                }
+                throw error;
+            }
+        }
+
+        authButton.addEventListener("click", async () => {
+            authButton.disabled = true;
+            try {
+                if (activeAccount) {
+                    await msalApp.logoutPopup({ account: activeAccount });
+                    activeAccount = null;
+                    todoList.innerHTML = '<div class="empty">Sign in with your organization account to view your tasks.</div>';
+                    setApiStatus(true, "Sign in to continue");
+                } else {
+                    const result = await msalApp.loginPopup({ scopes: [authConfig.apiScope] });
+                    activeAccount = result.account;
+                    await loadTodos();
+                }
+                updateAuthButton();
+            } catch (error) {
+                showNotice(error.message, "error");
+            } finally {
+                authButton.disabled = false;
+            }
+        });
 
         async function request(url, options = {}) {
+            const accessToken = await getAccessToken();
             const response = await fetch(url, {
                 ...options,
-                headers: { "Content-Type": "application/json", ...options.headers }
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${accessToken}`,
+                    ...options.headers
+                }
             });
             if (response.status === 204) return null;
             const text = await response.text();
@@ -317,6 +403,7 @@
         }
 
         async function loadTodos() {
+            if (!activeAccount) return;
             todoList.innerHTML = '<div class="loading">Loading your tasks…</div>';
             const filter = document.getElementById("status-filter").value;
             const params = new URLSearchParams({ page: String(currentPage), size: String(pageSize), sort: "createdAt,desc" });
@@ -462,7 +549,7 @@
 
         document.getElementById("status-filter").addEventListener("change", () => {
             currentPage = 0;
-            loadTodos();
+            initializeAuth();
         });
         document.getElementById("refresh-button").addEventListener("click", loadTodos);
         document.getElementById("previous-button").addEventListener("click", () => {

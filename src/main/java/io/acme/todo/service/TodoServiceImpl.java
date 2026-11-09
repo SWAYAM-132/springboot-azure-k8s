@@ -27,41 +27,41 @@ public class TodoServiceImpl implements TodoService {
     }
 
     @Override
-    public TodoResponse create(CreateTodoRequest request) {
-        Todo todo = new Todo(request.title(), request.description());
+    public TodoResponse create(String ownerId, CreateTodoRequest request) {
+        Todo todo = new Todo(ownerId, request.title(), request.description());
         return toResponse(todoRepository.save(todo));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<TodoResponse> findAll(Boolean completed, Pageable pageable) {
+    public Page<TodoResponse> findAll(String ownerId, Boolean completed, Pageable pageable) {
         validateSort(pageable);
         Page<Todo> todos = completed == null
-                ? todoRepository.findAll(pageable)
-                : todoRepository.findAllByCompleted(completed, pageable);
+                ? todoRepository.findAllByOwnerId(ownerId, pageable)
+                : todoRepository.findAllByOwnerIdAndCompleted(ownerId, completed, pageable);
         return todos.map(TodoServiceImpl::toResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public TodoResponse findById(Long id) {
-        return toResponse(getTodo(id));
+    public TodoResponse findById(String ownerId, Long id) {
+        return toResponse(getTodo(ownerId, id));
     }
 
     @Override
-    public TodoResponse update(Long id, UpdateTodoRequest request) {
-        Todo todo = getTodo(id);
+    public TodoResponse update(String ownerId, Long id, UpdateTodoRequest request) {
+        Todo todo = getTodo(ownerId, id);
         todo.update(request.title(), request.description(), request.completed());
         return toResponse(todoRepository.save(todo));
     }
 
     @Override
-    public void delete(Long id) {
-        todoRepository.delete(getTodo(id));
+    public void delete(String ownerId, Long id) {
+        todoRepository.delete(getTodo(ownerId, id));
     }
 
-    private Todo getTodo(Long id) {
-        return todoRepository.findById(id)
+    private Todo getTodo(String ownerId, Long id) {
+        return todoRepository.findByIdAndOwnerId(id, ownerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Todo", id));
     }
 

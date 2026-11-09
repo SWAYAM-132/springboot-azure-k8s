@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: todo-api
-  namespace: todo-nonprod
   labels:
     app: todo-api
 spec:
@@ -15,6 +14,7 @@ spec:
       labels:
         app: todo-api
     spec:
+      serviceAccountName: todo-api
       containers:
       - name: todo-api
         image: todo-api:latest
@@ -23,6 +23,18 @@ spec:
         - name: http
           containerPort: 8080
         env:
+        - name: TODO_ENTRA_TENANT_ID
+          valueFrom:
+            configMapKeyRef: { name: todo-api-auth, key: entraTenantId }
+        - name: TODO_ENTRA_SPA_CLIENT_ID
+          valueFrom:
+            configMapKeyRef: { name: todo-api-auth, key: entraSpaClientId }
+        - name: TODO_API_AUDIENCE
+          valueFrom:
+            configMapKeyRef: { name: todo-api-auth, key: apiAudience }
+        - name: TODO_API_SCOPE
+          valueFrom:
+            configMapKeyRef: { name: todo-api-auth, key: apiScope }
         # Spring reads datasource settings from its standard environment variables.
         - name: SPRING_DATASOURCE_URL
           valueFrom:
@@ -72,3 +84,20 @@ spec:
           runAsUser: 10001
           capabilities:
             drop: [ ALL ]
+        volumeMounts:
+        - name: todo-api-secrets
+          mountPath: /mnt/secrets-store
+          readOnly: true
+      volumes:
+      - name: todo-api-secrets
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: todo-api-secrets
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      # The workload identity webhook injects its projected token only into labeled pods.
+      # The label is added to the pod template by each environment overlay.

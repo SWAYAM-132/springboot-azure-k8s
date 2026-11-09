@@ -30,10 +30,10 @@ class TodoServiceImplTest {
 
     @Test
     void findByIdReturnsTodoResponse() {
-        Todo todo = new Todo("Write tests", "Cover service behavior");
-        when(todoRepository.findById(1L)).thenReturn(Optional.of(todo));
+        Todo todo = new Todo("tenant:user", "Write tests", "Cover service behavior");
+        when(todoRepository.findByIdAndOwnerId(1L, "tenant:user")).thenReturn(Optional.of(todo));
 
-        TodoResponse response = todoService.findById(1L);
+        TodoResponse response = todoService.findById("tenant:user", 1L);
 
         assertEquals("Write tests", response.title());
         assertEquals("Cover service behavior", response.description());
@@ -42,24 +42,24 @@ class TodoServiceImplTest {
 
     @Test
     void findByIdThrowsWhenTodoDoesNotExist() {
-        when(todoRepository.findById(404L)).thenReturn(Optional.empty());
+        when(todoRepository.findByIdAndOwnerId(404L, "tenant:user")).thenReturn(Optional.empty());
 
-        assertThrows(ResourceNotFoundException.class, () -> todoService.findById(404L));
+        assertThrows(ResourceNotFoundException.class, () -> todoService.findById("tenant:user", 404L));
     }
 
     @Test
     void findAllRejectsUnknownSortProperties() {
         PageRequest pageable = PageRequest.of(0, 20, Sort.by("notAProperty"));
 
-        assertThrows(InvalidSortException.class, () -> todoService.findAll(null, pageable));
+        assertThrows(InvalidSortException.class, () -> todoService.findAll("tenant:user", null, pageable));
     }
 
     @Test
     void deleteRemovesExistingTodo() {
-        Todo todo = new Todo("Delete me", null);
-        when(todoRepository.findById(1L)).thenReturn(Optional.of(todo));
+        Todo todo = new Todo("tenant:user", "Delete me", null);
+        when(todoRepository.findByIdAndOwnerId(1L, "tenant:user")).thenReturn(Optional.of(todo));
 
-        todoService.delete(1L);
+        todoService.delete("tenant:user", 1L);
 
         verify(todoRepository).delete(todo);
     }

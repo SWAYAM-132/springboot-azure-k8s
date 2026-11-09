@@ -104,8 +104,16 @@ module acrPushRoleAssignment './modules/identity/role-assignments.bicep' = {
     acrName: 'acrtodoplatformci'
     principalId: managedIdentities.outputs.adoPrincipalId
   }
+  dependsOn: [
+    containerRegistry
+  ]
 }
 
 output createdResourceGroupNames array = [
   for (rg, i) in resourceGroupDefinitions: resourceGroups[i].name
 ]
+output todoApiWorkloadIdentityName string = managedIdentities.outputs.todoApiIdentityName
+output todoApiWorkloadIdentityClientId string = managedIdentities.outputs.todoApiClientId
+output adoProdIdentityName string = managedIdentities.outputs.adoProdIdentityName
+output adoAcrIdentityClientId string = managedIdentities.outputs.adoClientId
+output adoProdIdentityClientId string = managedIdentities.outputs.adoProdClientId

@@ -7,5 +7,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TodoRepository extends JpaRepository<Todo, Long> {
 
-    Page<Todo> findAllByCompleted(boolean completed, Pageable pageable);
+    Page<Todo> findAllByOwnerId(String ownerId, Pageable pageable);
+
+    Page<Todo> findAllByOwnerIdAndCompleted(String ownerId, boolean completed, Pageable pageable);
+
+    java.util.Optional<Todo> findByIdAndOwnerId(Long id, String ownerId);
 }

@@ -8,6 +8,8 @@ param dnsServiceIP string
 param acrResourceGroupName string
 param acrName string
 param adoIdentityPrincipalId string
+param deploymentNamespaces array
+param assignNamespaceRoles bool = false
 param nodeVmSize string = 'Standard_B2s'
 param minNodeCount int = 1
 param maxNodeCount int = 2
@@ -40,6 +42,11 @@ resource aks 'Microsoft.ContainerService/managedClusters@2026-05-01' = {
       imageCleaner: {
         enabled: true
         intervalHours: 168
+      }
+    }
+    addonProfiles: {
+      azureKeyvaultSecretsProvider: {
+        enabled: true
       }
     }
     aadProfile: {
@@ -107,15 +114,24 @@ resource aksClusterUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   }
 }
 
-resource aksRbacWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(aks.id, adoIdentityPrincipalId, aksRbacWriterRoleGuid)
-  scope: aks
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', aksRbacWriterRoleGuid)
-    principalId: adoIdentityPrincipalId
-    principalType: 'ServicePrincipal'
+resource deploymentNamespacesInAks 'Microsoft.ContainerService/managedClusters/namespaces@2024-05-01' existing = [
+  for namespace in deploymentNamespaces: {
+    parent: aks
+    name: namespace
   }
-}
+]
+
+resource aksRbacWriters 'Microsoft.Authorization/roleAssignments@2022-04-01' = [
+  for (namespace, i) in deploymentNamespaces: if (assignNamespaceRoles) {
+    name: guid(deploymentNamespacesInAks[i].id, adoIdentityPrincipalId, aksRbacWriterRoleGuid)
+    scope: deploymentNamespacesInAks[i]
+    properties: {
+      roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', aksRbacWriterRoleGuid)
+      principalId: adoIdentityPrincipalId
+      principalType: 'ServicePrincipal'
+    }
+  }
+]
 
 output clusterName string = aks.name
 output clusterId string = aks.id

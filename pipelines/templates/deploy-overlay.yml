@@ -3,7 +3,9 @@ parameters:
     type: string
   - name: displayName
     type: string
-  - name: branchRef
+  - name: dependsOn
+    type: object
+  - name: azureServiceConnection
     type: string
   - name: overlay
     type: string
@@ -21,14 +23,16 @@ parameters:
 stages:
   - stage: ${{ parameters.stageName }}
     displayName: ${{ parameters.displayName }}
-    dependsOn: Build
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], '${{ parameters.branchRef }}'))
+    dependsOn: ${{ parameters.dependsOn }}
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/dev'))
+    variables:
+      imageDigest: $[ stageDependencies.Build.BuildAndPush.outputs['PublishImage.imageDigest'] ]
     jobs:
       - deployment: DeployOverlay
         displayName: Apply ${{ parameters.overlay }} Kustomize overlay
         environment: ${{ parameters.adoEnvironment }}
         pool:
-          vmImage: $(vmImage)
+          name: $(deployAgentPool)
         strategy:
           runOnce:
             deploy:
@@ -38,17 +42,15 @@ stages:
                 - task: AzureCLI@2
                   displayName: Deploy, verify rollout and check ready replicas
                   inputs:
-                    azureSubscription: $(azureServiceConnection)
+                    azureSubscription: ${{ parameters.azureServiceConnection }}
                     scriptType: bash
                     scriptLocation: inlineScript
                     inlineScript: |
                       set -euo pipefail
-                      IMAGE_TAG="$(Build.SourceVersion)"
-                      [[ "${IMAGE_TAG}" =~ ^[0-9a-f]{40}$ ]]
+                      IMAGE_DIGEST="$(imageDigest)"
+                      [[ "${IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]
+                      IMAGE="$(acrName).azurecr.io/$(imageRepository)@${IMAGE_DIGEST}"
                       OVERLAY="$(Build.SourcesDirectory)/k8s/overlays/${{ parameters.overlay }}"
-                      KUSTOMIZATION="${OVERLAY}/kustomization.yaml"
-                      sed -i "s/^    newTag: latest$/    newTag: ${IMAGE_TAG}/" "${KUSTOMIZATION}"
-                      grep -q "newTag: ${IMAGE_TAG}" "${KUSTOMIZATION}"
 
                       az aks get-credentials \
                         --resource-group "${{ parameters.aksResourceGroup }}" \
@@ -61,8 +63,31 @@ stages:
                       fi
                       kubelogin convert-kubeconfig -l azurecli
 
-                      IMAGE="$(acrName).azurecr.io/$(imageRepository):${IMAGE_TAG}"
-                      kubectl apply -k "${OVERLAY}"
+                      for value in "${ENTRA_TENANT_ID}" "${ENTRA_SPA_CLIENT_ID}" \
+                          "${TODO_API_AUDIENCE}" "${TODO_API_SCOPE}" \
+                          "${WORKLOAD_IDENTITY_CLIENT_ID}" "${KEYVAULT_NAME}"; do
+                        test -n "${value}"
+                      done
+                      command -v envsubst >/dev/null 2>&1
+
+                      kubectl -n "${{ parameters.namespace }}" create configmap todo-api-auth \
+                        --from-literal=entraTenantId="${ENTRA_TENANT_ID}" \
+                        --from-literal=entraSpaClientId="${ENTRA_SPA_CLIENT_ID}" \
+                        --from-literal=apiAudience="${TODO_API_AUDIENCE}" \
+                        --from-literal=apiScope="${TODO_API_SCOPE}" \
+                        --dry-run=client -o yaml | kubectl apply -f -
+
+                      MANIFEST="$(mktemp)"
+                      TRANSFORMED="$(mktemp)"
+                      trap 'rm -f "${MANIFEST}" "${TRANSFORMED}"' EXIT
+                      kubectl kustomize "${OVERLAY}" \
+                        | envsubst '${WORKLOAD_IDENTITY_CLIENT_ID} ${KEYVAULT_NAME} ${AZURE_TENANT_ID}' \
+                        > "${MANIFEST}"
+                      IMAGE_LINE='        image: acrtodoplatformci.azurecr.io/todo-api:latest'
+                      test "$(grep -Fxc "${IMAGE_LINE}" "${MANIFEST}")" = 1
+                      sed "s|${IMAGE_LINE}|        image: ${IMAGE}|" "${MANIFEST}" > "${TRANSFORMED}"
+                      grep -Fq "image: ${IMAGE}" "${TRANSFORMED}"
+                      kubectl apply -f "${TRANSFORMED}"
                       kubectl -n "${{ parameters.namespace }}" rollout status \
                         deployment/todo-api --timeout=180s
 
@@ -73,3 +98,11 @@ stages:
                         -o jsonpath='{.status.readyReplicas}')"
                       test "${READY_REPLICAS}" = "${{ parameters.replicas }}"
                       kubectl -n "${{ parameters.namespace }}" get pods -l app=todo-api
+                  env:
+                    ENTRA_TENANT_ID: $(entraTenantId)
+                    ENTRA_SPA_CLIENT_ID: $(entraSpaClientId)
+                    TODO_API_AUDIENCE: $(todoApiAudience)
+                    TODO_API_SCOPE: $(todoApiScope)
+                    AZURE_TENANT_ID: $(entraTenantId)
+                    WORKLOAD_IDENTITY_CLIENT_ID: $(workloadIdentityClientId)
+                    KEYVAULT_NAME: $(keyVaultName)

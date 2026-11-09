@@ -8,13 +8,13 @@ import org.springframework.data.domain.Pageable;
 
 public interface TodoService {
 
-    TodoResponse create(CreateTodoRequest request);
+    TodoResponse create(String ownerId, CreateTodoRequest request);
 
-    Page<TodoResponse> findAll(Boolean completed, Pageable pageable);
+    Page<TodoResponse> findAll(String ownerId, Boolean completed, Pageable pageable);
 
-    TodoResponse findById(Long id);
+    TodoResponse findById(String ownerId, Long id);
 
-    TodoResponse update(Long id, UpdateTodoRequest request);
+    TodoResponse update(String ownerId, Long id, UpdateTodoRequest request);
 
-    void delete(Long id);
+    void delete(String ownerId, Long id);
 }

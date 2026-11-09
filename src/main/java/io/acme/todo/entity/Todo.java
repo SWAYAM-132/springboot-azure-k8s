@@ -18,6 +18,9 @@ public class Todo {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(nullable = false, length = 80)
+    private String ownerId;
+
     @Column(nullable = false, length = 200)
     private String title;
 
@@ -36,7 +39,8 @@ public class Todo {
     protected Todo() {
     }
 
-    public Todo(String title, String description) {
+    public Todo(String ownerId, String title, String description) {
+        this.ownerId = ownerId;
         this.title = title;
         this.description = description;
     }

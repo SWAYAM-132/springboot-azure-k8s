@@ -6,6 +6,8 @@ param location string = 'centralindia'
 
 @description('Private DNS zone used by PostgreSQL Flexible Servers.')
 param postgresPrivateDnsZoneName string = 'todo-platform.postgres.database.azure.com'
+@description('Private DNS zone for Key Vault private endpoints.')
+param keyVaultPrivateDnsZoneName string = 'privatelink.vaultcore.azure.net'
 
 var vnetName = 'vnet-todo-platform-ci'
 var vnetAddressSpace = '10.40.0.0/16'
@@ -91,6 +93,23 @@ resource postgresDnsVnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLi
   }
 }
 
+resource keyVaultPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+  name: keyVaultPrivateDnsZoneName
+  location: 'global'
+}
+
+resource keyVaultDnsVnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
+  parent: keyVaultPrivateDnsZone
+  name: 'link-todo-platform-vnet'
+  location: 'global'
+  properties: {
+    virtualNetwork: {
+      id: platformVnet.id
+    }
+    registrationEnabled: false
+  }
+}
+
 output vnetName string = platformVnet.name
 output vnetId string = platformVnet.id
 output vnetAddressSpace string = vnetAddressSpace
@@ -101,3 +120,4 @@ output privateEndpointsSubnetId string = resourceId('Microsoft.Network/virtualNe
 output managementSubnetId string = resourceId('Microsoft.Network/virtualNetworks/subnets', vnetName, 'snet-management')
 output managementNsgId string = managementNsg.id
 output postgresPrivateDnsZoneId string = postgresPrivateDnsZone.id
+output keyVaultPrivateDnsZoneId string = keyVaultPrivateDnsZone.id

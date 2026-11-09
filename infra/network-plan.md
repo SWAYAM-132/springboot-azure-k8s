@@ -30,13 +30,15 @@ Address space: 10.40.0.0/16
 - PostgreSQL subnet delegated to Microsoft.DBforPostgreSQL/flexibleServers.
 - PostgreSQL private DNS zone: todo-platform.postgres.database.azure.com.
 - Private DNS zone linked to platform VNet.
-- Private endpoint DNS zones will be added alongside their respective endpoints.
+- Key Vault private endpoint in snet-private-endpoints.
+- Key Vault private DNS zone: privatelink.vaultcore.azure.net, linked to platform VNet.
+- Key Vault public network access is disabled.
+- Azure DevOps deployment agents must run in a VNet-connected agent pool.
 - No custom AKS subnet deny rules yet.
 - No custom UDR or forced tunnelling yet.
 
 ## Deferred
 - ACR private endpoint and DNS integration.
-- Key Vault private endpoint and DNS integration.
 - AKS-specific network rules.
 - NAT Gateway or Azure Firewall decision.
 - DNS Private Resolver, if hybrid DNS becomes necessary.

@@ -2,8 +2,6 @@ trigger:
   branches:
     include:
       - dev
-      - stage
-      - release
 
 pr:
   branches:
@@ -13,11 +11,19 @@ pr:
       - release
 
 variables:
-  azureServiceConnection: 'sc-todo-platform-acr-ci'
-  acrName: 'acrtodoplatformci'
-  imageRepository: 'todo-api'
-  dockerfilePath: '$(Build.SourcesDirectory)/Dockerfile'
-  vmImage: 'ubuntu-latest'
+  - group: todo-platform-auth
+  - name: azureServiceConnection
+    value: 'sc-todo-platform-acr-ci'
+  - name: acrName
+    value: 'acrtodoplatformci'
+  - name: imageRepository
+    value: 'todo-api'
+  - name: dockerfilePath
+    value: '$(Build.SourcesDirectory)/Dockerfile'
+  - name: vmImage
+    value: 'ubuntu-latest'
+  - name: deployAgentPool
+    value: 'todo-vnet-agent'
 
 stages:
 - stage: Build
@@ -41,6 +47,7 @@ stages:
         ./mvnw -B clean verify
       displayName: Maven clean verify
     - task: AzureCLI@2
+      name: PublishImage
       displayName: Build and push commit-tagged image to ACR
       condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
       inputs:
@@ -61,13 +68,16 @@ stages:
             --name "$(imageRepository):${IMAGE_TAG}" \
             --query digest -o tsv)"
           test -n "${DIGEST}" && test "${DIGEST}" != "None"
+          echo "##vso[task.setvariable variable=imageDigest;isOutput=true]${DIGEST}"
           echo "Published $(acrName).azurecr.io/$(imageRepository):${IMAGE_TAG} (${DIGEST})"
 
 - template: pipelines/templates/deploy-overlay.yml
   parameters:
     stageName: Deploy_Dev
     displayName: Deploy dev to nonprod AKS
-    branchRef: refs/heads/dev
+    dependsOn:
+      - Build
+    azureServiceConnection: sc-todo-platform-acr-ci
     overlay: dev
     namespace: todo-dev
     replicas: 1
@@ -79,7 +89,10 @@ stages:
   parameters:
     stageName: Deploy_Stage
     displayName: Deploy stage to nonprod AKS
-    branchRef: refs/heads/stage
+    dependsOn:
+      - Build
+      - Deploy_Dev
+    azureServiceConnection: sc-todo-platform-acr-ci
     overlay: stage
     namespace: todo-stage
     replicas: 2
@@ -91,7 +104,10 @@ stages:
   parameters:
     stageName: Deploy_Prod
     displayName: Deploy release to prod AKS
-    branchRef: refs/heads/release
+    dependsOn:
+      - Build
+      - Deploy_Stage
+    azureServiceConnection: sc-todo-platform-prod-ci
     overlay: prod
     namespace: todo-prod
     replicas: 3

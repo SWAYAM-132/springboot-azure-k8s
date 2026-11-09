@@ -4,6 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -46,7 +49,87 @@ class TodoApplicationTests {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paths['/api/todos']").exists())
-                .andExpect(jsonPath("$.paths['/api/todos/{id}']").exists());
+                .andExpect(jsonPath("$.paths['/api/todos/{id}']").exists())
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"));
+    }
+
+    @Test
+    void todoApiRejectsUnauthenticatedRequests() throws Exception {
+        mockMvc.perform(get("/api/todos"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void todoRecordsAreIsolatedByEntraUser() throws Exception {
+        var created = mockMvc.perform(post("/api/todos")
+                        .with(jwt().jwt(token -> token.claim("tid", "tenant-a").claim("oid", "user-a")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Private task"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn();
+        Number todoId = com.jayway.jsonpath.JsonPath.read(
+                created.getResponse().getContentAsString(), "$.id");
+
+        mockMvc.perform(get("/api/todos/" + todoId.longValue())
+                        .with(jwt().jwt(token -> token.claim("tid", "tenant-b").claim("oid", "user-b"))))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/api/todos")
+                        .with(jwt().jwt(token -> token.claim("tid", "tenant-b").claim("oid", "user-b"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    void todoOwnerCanUpdateAndDeleteTodo() throws Exception {
+        var owner = jwt().jwt(token -> token.claim("tid", "tenant-crud").claim("oid", "user-crud"));
+        var created = mockMvc.perform(post("/api/todos")
+                        .with(owner)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Original"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn();
+        Number todoId = com.jayway.jsonpath.JsonPath.read(
+                created.getResponse().getContentAsString(), "$.id");
+        String path = "/api/todos/" + todoId.longValue();
+
+        mockMvc.perform(put(path)
+                        .with(owner)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Updated",
+                                  "completed": true
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Updated"))
+                .andExpect(jsonPath("$.completed").value(true));
+
+        mockMvc.perform(delete(path).with(owner))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get(path).with(owner))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void todoApiReturnsNotFoundForUnknownIdsAndRejectsInvalidSort() throws Exception {
+        var owner = jwt().jwt(token -> token.claim("tid", "tenant-query").claim("oid", "user-query"));
+        mockMvc.perform(get("/api/todos/9223372036854775807").with(owner))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/todos?sort=notAProperty").with(owner))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/todos?page=10000&size=100").with(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(0));
     }
 
     @Test
@@ -67,6 +150,7 @@ class TodoApplicationTests {
     @Test
     void invalidCreateRequestReturnsStructuredBadRequest() throws Exception {
         mockMvc.perform(post("/api/todos")
+                        .with(jwt().jwt(token -> token.claim("tid", "test-tenant").claim("oid", "test-user")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
