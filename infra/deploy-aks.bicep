@@ -69,7 +69,7 @@ module nonprod './modules/aks/cluster.bicep' = if (deployNonprod) {
       'todo-stage'
     ]
     assignNamespaceRoles: assignNamespaceRoles
-    nodeVmSize: 'Standard_B2s'
+    nodeVmSize: 'Standard_B2s_v2'
     minNodeCount: 1
     maxNodeCount: 2
   }
@@ -93,8 +93,8 @@ module prod './modules/aks/cluster.bicep' = if (deployProd) {
     ]
     assignNamespaceRoles: assignNamespaceRoles
     nodeVmSize: 'Standard_D2s_v5'
-    minNodeCount: 2
-    maxNodeCount: 3
+    minNodeCount: 1
+    maxNodeCount: 2
   }
 }
 module nonprodDevFederation './modules/identity/federated-identity-credential.bicep' = if (deployNonprod) {

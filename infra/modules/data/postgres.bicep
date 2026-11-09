@@ -11,8 +11,8 @@ resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2025-08-01' = {
   name: serverName
   location: location
   sku: {
-    name: 'Standard_B1ms'
-    tier: 'Burstable'
+    name: 'Standard_D2s_v3'
+    tier: 'GeneralPurpose'
   }
   properties: {
     administratorLogin: administratorLogin
