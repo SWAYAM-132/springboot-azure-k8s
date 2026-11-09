@@ -1,8 +1,24 @@
-# Compiled class file
+# Secrets and local environment configuration
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+
+# macOS
+.DS_Store
+
+# Java / Maven
+target/
 *.class
 
-# Log file
+# Logs
 *.log
+
+# IDE
+.idea/
+.vscode/
+*.iml
 
 # BlueJ files
 *.ctxt
@@ -23,9 +39,5 @@
 hs_err_pid*
 replay_pid*
 
-# Maven
-target/
-
-# Local configuration and secrets
-.env
-application-local.properties
+# Local deployment parameters
+*.local.bicepparam

@@ -1,106 +1,100 @@
-
 trigger:
-  - dev
+  branches:
+    include:
+      - dev
+      - stage
+      - release
 
-pool:
-  vmImage: ubuntu-latest
+pr:
+  branches:
+    include:
+      - dev
+      - stage
+      - release
 
 variables:
-  ACR_NAME: swayamtodoacr2026
-  IMAGE_REPOSITORY: todo-api
+  azureServiceConnection: 'sc-todo-platform-acr-ci'
+  acrName: 'acrtodoplatformci'
+  imageRepository: 'todo-api'
+  dockerfilePath: '$(Build.SourcesDirectory)/Dockerfile'
+  vmImage: 'ubuntu-latest'
 
-steps:
-  # 1. Set up Java 21
-  - task: JavaToolInstaller@0
-    displayName: 'Set up Java 21'
-    inputs:
-      versionSpec: '21'
-      jdkArchitectureOption: 'x64'
-      jdkSourceOption: 'PreInstalled'
+stages:
+- stage: Build
+  displayName: Test and publish image
+  jobs:
+  - job: BuildAndPush
+    pool:
+      vmImage: $(vmImage)
+    steps:
+    - checkout: self
+      clean: true
+    - task: JavaToolInstaller@0
+      displayName: Use Java 21
+      inputs:
+        versionSpec: '21'
+        jdkArchitectureOption: x64
+        jdkSourceOption: PreInstalled
+    - bash: |
+        set -euo pipefail
+        chmod +x ./mvnw
+        ./mvnw -B clean verify
+      displayName: Maven clean verify
+    - task: AzureCLI@2
+      displayName: Build and push commit-tagged image to ACR
+      condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          set -euo pipefail
+          IMAGE_TAG="$(Build.SourceVersion)"
+          [[ "${IMAGE_TAG}" =~ ^[0-9a-f]{40}$ ]]
+          az acr build \
+            --registry "$(acrName)" \
+            --image "$(imageRepository):${IMAGE_TAG}" \
+            --file "$(dockerfilePath)" \
+            "$(Build.SourcesDirectory)"
+          DIGEST="$(az acr manifest show-metadata \
+            --registry "$(acrName)" \
+            --name "$(imageRepository):${IMAGE_TAG}" \
+            --query digest -o tsv)"
+          test -n "${DIGEST}" && test "${DIGEST}" != "None"
+          echo "Published $(acrName).azurecr.io/$(imageRepository):${IMAGE_TAG} (${DIGEST})"
 
-  # 2. Build and test Spring Boot application
-  - script: |
-      set -e
-      java -version
-      chmod +x mvnw
-      ./mvnw clean verify
-    displayName: 'Build and Test Spring Boot Application'
+- template: pipelines/templates/deploy-overlay.yml
+  parameters:
+    stageName: Deploy_Dev
+    displayName: Deploy dev to nonprod AKS
+    branchRef: refs/heads/dev
+    overlay: dev
+    namespace: todo-dev
+    replicas: 1
+    aksResourceGroup: rg-todo-nonprod-ci
+    aksCluster: aks-todo-nonprod-ci
+    adoEnvironment: todo-dev
 
-  # 3. Authenticate to Azure and push image to ACR
-  - task: AzureCLI@2
-    displayName: 'Build and Push Docker Image to ACR'
-    inputs:
-      azureSubscription: 'sc-personal-azure'
-      scriptType: bash
-      scriptLocation: inlineScript
-      inlineScript: |
-        set -e
+- template: pipelines/templates/deploy-overlay.yml
+  parameters:
+    stageName: Deploy_Stage
+    displayName: Deploy stage to nonprod AKS
+    branchRef: refs/heads/stage
+    overlay: stage
+    namespace: todo-stage
+    replicas: 2
+    aksResourceGroup: rg-todo-nonprod-ci
+    aksCluster: aks-todo-nonprod-ci
+    adoEnvironment: todo-stage
 
-        echo "Getting ACR login server..."
-        ACR_LOGIN_SERVER=$(az acr show \
-          --name "$(ACR_NAME)" \
-          --query loginServer \
-          --output tsv)
-
-        echo "ACR: $ACR_LOGIN_SERVER"
-
-        echo "Logging in to ACR..."
-        az acr login --name "$(ACR_NAME)"
-
-        echo "Building Docker image..."
-        docker build \
-          -t "$ACR_LOGIN_SERVER/$(IMAGE_REPOSITORY):$(Build.BuildId)" \
-          -t "$ACR_LOGIN_SERVER/$(IMAGE_REPOSITORY):latest" \
-          .
-
-        echo "Pushing versioned image..."
-        docker push "$ACR_LOGIN_SERVER/$(IMAGE_REPOSITORY):$(Build.BuildId)"
-
-        echo "Pushing latest image..."
-        docker push "$ACR_LOGIN_SERVER/$(IMAGE_REPOSITORY):latest"
-
-        echo "Successfully pushed images!"
-
-  # 4. Deployment to Container Apps
-  - task: AzureCLI@2
-    displayName: 'Deploy to Azure Container Apps'
-    inputs:
-      azureSubscription: 'sc-personal-azure'
-      scriptType: bash
-      scriptLocation: inlineScript
-      inlineScript: |
-        set -e
-
-        ACR_LOGIN_SERVER=$(az acr show \
-          --name "swayamtodoacr2026" \
-          --query loginServer \
-          --output tsv)
-
-        IMAGE="$ACR_LOGIN_SERVER/todo-api:$(Build.BuildId)"
-
-        az containerapp update \
-          --name "todo-api-containerapp-dev" \
-          --resource-group "rg-springboot-k8s-dev" \
-          --image "$IMAGE"
-
-  # 5. Download kubelogin
-  - task: KubeloginInstaller@0
-    displayName: 'Install kubelogin'
-    inputs:
-      kubeloginVersion: 'latest'
-
-  # 6. Deploy to AKS (CD)
-  - task: KubernetesManifest@1
-    displayName: 'Deploy Todo API to AKS'
-    inputs:
-      action: deploy
-      connectionType: azureResourceManager
-      azureSubscriptionConnection: 'sc-personal-azure'
-      azureResourceGroup: 'rg-springboot-k8s-dev'
-      kubernetesCluster: 'aks-todo-dev'
-      namespace: 'todo-dev'
-      manifests: |
-        k8s/deployment.yaml
-      containers: |
-        swayamtodoacr2026-amescxfhh3g3bcde.azurecr.io/todo-api:$(Build.BuildId)
-      rolloutStatusTimeout: '180'
+- template: pipelines/templates/deploy-overlay.yml
+  parameters:
+    stageName: Deploy_Prod
+    displayName: Deploy release to prod AKS
+    branchRef: refs/heads/release
+    overlay: prod
+    namespace: todo-prod
+    replicas: 3
+    aksResourceGroup: rg-todo-prod-ci
+    aksCluster: aks-todo-prod-ci
+    adoEnvironment: todo-prod

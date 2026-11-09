@@ -1,0 +1,75 @@
+parameters:
+  - name: stageName
+    type: string
+  - name: displayName
+    type: string
+  - name: branchRef
+    type: string
+  - name: overlay
+    type: string
+  - name: namespace
+    type: string
+  - name: replicas
+    type: number
+  - name: aksResourceGroup
+    type: string
+  - name: aksCluster
+    type: string
+  - name: adoEnvironment
+    type: string
+
+stages:
+  - stage: ${{ parameters.stageName }}
+    displayName: ${{ parameters.displayName }}
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], '${{ parameters.branchRef }}'))
+    jobs:
+      - deployment: DeployOverlay
+        displayName: Apply ${{ parameters.overlay }} Kustomize overlay
+        environment: ${{ parameters.adoEnvironment }}
+        pool:
+          vmImage: $(vmImage)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                  clean: true
+                - task: AzureCLI@2
+                  displayName: Deploy, verify rollout and check ready replicas
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      IMAGE_TAG="$(Build.SourceVersion)"
+                      [[ "${IMAGE_TAG}" =~ ^[0-9a-f]{40}$ ]]
+                      OVERLAY="$(Build.SourcesDirectory)/k8s/overlays/${{ parameters.overlay }}"
+                      KUSTOMIZATION="${OVERLAY}/kustomization.yaml"
+                      sed -i "s/^    newTag: latest$/    newTag: ${IMAGE_TAG}/" "${KUSTOMIZATION}"
+                      grep -q "newTag: ${IMAGE_TAG}" "${KUSTOMIZATION}"
+
+                      az aks get-credentials \
+                        --resource-group "${{ parameters.aksResourceGroup }}" \
+                        --name "${{ parameters.aksCluster }}" \
+                        --overwrite-existing
+                      if ! command -v kubectl >/dev/null 2>&1 || ! command -v kubelogin >/dev/null 2>&1; then
+                        az aks install-cli \
+                          --install-location /usr/local/bin/kubectl \
+                          --kubelogin-install-location /usr/local/bin/kubelogin
+                      fi
+                      kubelogin convert-kubeconfig -l azurecli
+
+                      IMAGE="$(acrName).azurecr.io/$(imageRepository):${IMAGE_TAG}"
+                      kubectl apply -k "${OVERLAY}"
+                      kubectl -n "${{ parameters.namespace }}" rollout status \
+                        deployment/todo-api --timeout=180s
+
+                      DEPLOYED_IMAGE="$(kubectl -n "${{ parameters.namespace }}" get deployment todo-api \
+                        -o jsonpath='{.spec.template.spec.containers[?(@.name=="todo-api")].image}')"
+                      test "${DEPLOYED_IMAGE}" = "${IMAGE}"
+                      READY_REPLICAS="$(kubectl -n "${{ parameters.namespace }}" get deployment todo-api \
+                        -o jsonpath='{.status.readyReplicas}')"
+                      test "${READY_REPLICAS}" = "${{ parameters.replicas }}"
+                      kubectl -n "${{ parameters.namespace }}" get pods -l app=todo-api
