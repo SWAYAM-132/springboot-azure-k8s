@@ -7,6 +7,9 @@ param location string = 'centralindia'
 @description('Project identifier.')
 param projectName string = 'todo'
 
+@description('Disable public access to ACR after private endpoint connectivity is verified.')
+param disableAcrPublicNetworkAccess bool = false
+
 @description('Common tags applied to all platform resource groups.')
 param commonTags object = {
   project: 'todo-azure-platform'
@@ -80,7 +83,7 @@ module containerRegistry './modules/container-registry/acr.bicep' = {
     acrSku: 'Premium'
     privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId
     privateDnsZoneId: networking.outputs.acrPrivateDnsZoneId
-    disablePublicNetworkAccess: false
+    disablePublicNetworkAccess: disableAcrPublicNetworkAccess
     tags: commonTags
   }
   dependsOn: [
