@@ -357,18 +357,21 @@ state or passed to the provider.
 ### 4. Register each VM agent
 
 SSH through an approved jump host/VPN or Azure Bastion; the VM has no public IP.
-Run `scripts/install-ado-agent.sh` as the `azureagent` user with:
+Register without opening inbound SSH by using the helper from your workstation:
 
-- nonprod VM: `ADO_ORG_URL=https://dev.azure.com/swayam-cloud-lab`,
-  `ADO_AGENT_POOL=todo-vnet-agent-nonprod`
-- prod VM: `ADO_ORG_URL=https://dev.azure.com/swayam-cloud-lab`,
-  `ADO_AGENT_POOL=todo-vnet-agent-prod`
+```sh
+VM_NAME=vm-todo-ado-nonprod-ci AGENT_POOL=todo-vnet-agent-nonprod \
+  scripts/register-agent-runcommand.sh
+VM_NAME=vm-todo-ado-prod-ci AGENT_POOL=todo-vnet-agent-prod \
+  scripts/register-agent-runcommand.sh
+```
 
-The script uses Entra device-code authentication. Complete the displayed
-device login in your browser with an account that is an administrator of the
-target agent pool. No PAT or client secret is stored on the VM. This
-registration identity is used only to register the agent; pipeline jobs use
-the VM's attached managed identity for Azure resource access.
+The helper uses Azure VM Run Command to start Entra device-code registration,
+prints the device code, and waits for you to complete sign-in in your browser.
+Use an account that is an administrator of the target agent pool. No PAT or
+client secret is stored on the VM. Registration credentials are used only to
+register the agent; pipeline jobs use the VM's attached managed identity for
+Azure resource access.
 
 ### 5. Bootstrap namespaces and namespace-scoped AKS permissions
 
