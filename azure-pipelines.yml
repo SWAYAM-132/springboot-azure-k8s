@@ -61,7 +61,7 @@ stages:
     - bash: |
         set -euo pipefail
         az login --identity --client-id "$(nonprodAzureClientId)" --output none
-        az account set --subscription "$(AZURE_SUBSCRIPTION_ID)"
+        az account set --subscription "$AZURE_SUBSCRIPTION_ID"
         az acr login --name "$(acrName)"
         IMAGE_TAG="$(Build.SourceVersion)"
         [[ "${IMAGE_TAG}" =~ ^[0-9a-f]{40}$ ]]
