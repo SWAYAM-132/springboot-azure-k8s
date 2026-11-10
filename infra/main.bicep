@@ -77,7 +77,10 @@ module containerRegistry './modules/container-registry/acr.bicep' = {
   params: {
     acrName: 'acrtodoplatformci'
     location: location
-    acrSku: 'Basic'
+    acrSku: 'Premium'
+    privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId
+    privateDnsZoneId: networking.outputs.acrPrivateDnsZoneId
+    disablePublicNetworkAccess: false
     tags: commonTags
   }
   dependsOn: [
