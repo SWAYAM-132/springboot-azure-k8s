@@ -1,0 +1,18 @@
+#cloud-config
+package_update: true
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - jq
+  - unzip
+  - gettext-base
+  - docker.io
+  - apt-transport-https
+  - gnupg
+runcmd:
+  - systemctl enable --now docker
+  - usermod -aG docker azureagent
+  - install -d -o azureagent -g azureagent /opt/ado-agent
+  - curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+  - az aks install-cli --install-location /usr/local/bin/kubectl --kubelogin-install-location /usr/local/bin/kubelogin

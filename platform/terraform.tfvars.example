@@ -1,0 +1,4 @@
+azuredevops_org_url = "https://dev.azure.com/swayam-cloud-lab"
+project_name         = "SpringBoot-Azure-Deployment"
+
+approval_user_principal_name = "redraven0132@gmail.com"

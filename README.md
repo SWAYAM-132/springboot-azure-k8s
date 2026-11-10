@@ -281,3 +281,134 @@ Configure Azure DevOps approval checks on the `todo-stage` and `todo-prod`
 environments; the prod check is the release approval gate. Branches named
 `stage` and `release` no longer independently rebuild images. Pull requests run
 verification but do not publish or deploy.
+
+## Private VNet Azure DevOps agents (feature/private-vnet-agents)
+
+The private-agent implementation is intentionally staged. It reuses the existing
+VNet, management subnet, managed identities, AKS clusters, Key Vault and ACR.
+
+### 1. Create the private ACR endpoint and DNS
+
+The shared networking module now creates and links `privatelink.azurecr.io`.
+The ACR module upgrades the existing registry to Premium and creates its
+private endpoint. Public access remains enabled during initial validation.
+
+Review first:
+
+```sh
+az deployment sub what-if --location centralindia \
+  --parameters infra/main.bicepparam
+
+az deployment sub create --name todo-private-acr \
+  --location centralindia --parameters infra/main.bicepparam
+```
+
+After agent VMs are online and private DNS resolution/push/pull have been
+verified, disable ACR public access:
+
+```sh
+az deployment sub what-if --location centralindia \
+  --parameters infra/main.bicepparam disableAcrPublicNetworkAccess=true
+
+az deployment sub create --name todo-private-acr-lockdown \
+  --location centralindia --parameters infra/main.bicepparam \
+  disableAcrPublicNetworkAccess=true
+```
+
+### 2. Deploy two self-hosted agent VMs
+
+Generate or use an SSH key pair; pass only its public key to Bicep:
+
+```sh
+az deployment sub what-if --location centralindia \
+  --template-file infra/deploy-agents.bicep \
+  --parameters sshPublicKey="$(cat ~/.ssh/id_ed25519.pub)"
+
+az deployment sub create --name todo-ado-agents \
+  --location centralindia --template-file infra/deploy-agents.bicep \
+  --parameters sshPublicKey="$(cat ~/.ssh/id_ed25519.pub)"
+```
+
+The VMs have no public IP. They use the existing management subnet and
+separate user-assigned identities. The NSG currently has no custom rules, so
+Azure default outbound rules apply; inbound is not opened.
+
+### 3. Create Azure DevOps pools/environments
+
+Terraform in `platform/` creates the two organisation-level pools, project
+queues, environments, and Stage/Prod approval checks. The Terraform bootstrap uses the signed-in Azure CLI identity (no PAT or
+service connection). The signed-in user must have permission to manage the
+project's agent pools and environments.
+
+```sh
+cd platform
+terraform init
+export AZDO_ORG_SERVICE_URL="https://dev.azure.com/swayam-cloud-lab"
+export TF_VAR_azuredevops_org_url="$AZDO_ORG_SERVICE_URL"
+export TF_VAR_approval_user_principal_name="<ADO approver sign-in>"
+az login
+terraform plan
+terraform apply
+```
+
+Terraform uses the Azure CLI signed-in identity. No PAT is stored in Terraform
+state or passed to the provider.
+
+### 4. Register each VM agent
+
+SSH through an approved jump host/VPN or Azure Bastion; the VM has no public IP.
+Register without opening inbound SSH by using the helper from your workstation:
+
+```sh
+VM_NAME=vm-todo-ado-nonprod-ci AGENT_POOL=todo-vnet-agent-nonprod \
+  scripts/register-agent-runcommand.sh
+VM_NAME=vm-todo-ado-prod-ci AGENT_POOL=todo-vnet-agent-prod \
+  scripts/register-agent-runcommand.sh
+```
+
+The helper uses Azure VM Run Command to start Entra device-code registration,
+prints the device code, and waits for you to complete sign-in in your browser.
+Use an account that is an administrator of the target agent pool. No PAT or
+client secret is stored on the VM. Registration credentials are used only to
+register the agent; pipeline jobs use the VM's attached managed identity for
+Azure resource access.
+
+### 5. Bootstrap namespaces and namespace-scoped AKS permissions
+
+Run `scripts/bootstrap-aks-namespaces.sh` from an administrator workstation
+with cluster-admin access and permission to create Azure role assignments.
+This creates the three namespaces and grants the matching pipeline identity
+AKS RBAC Writer only within its environment namespace(s).
+
+### 6. Key Vault RBAC migration
+
+The deployed vault currently has access-policy mode enabled even though the
+repository's Key Vault module declares RBAC mode. Before switching, verify the
+application identity has Key Vault Secrets User at the three application
+secret scopes (the existing Bicep module defines these assignments).
+
+Run `scripts/migrate-keyvault-rbac.sh` from a network-connected host with
+permission to update the vault. Validate CSI secret mounts and app readiness.
+Only then run `scripts/cleanup-legacy-keyvault-rbac.sh` to remove the
+redundant Key Vault grants for the old nonprod ADO identity and obsolete
+Key Vault service-connection principal. Unknown app-registration grants are
+deliberately preserved pending ownership confirmation.
+
+### 7. Pipeline behavior
+
+`azure-pipelines.yml` no longer references an Azure service connection or
+variable group. Maven verification of pull requests runs on a Microsoft-hosted
+agent so untrusted PR code never runs on a VM with managed identity. Image
+build/push and deployments run on the isolated private VNet agents using
+`az login --identity`.
+
+Replace the Entra SPA/API placeholders in the YAML with the confirmed
+application registration values before deploying. The workload identity client
+ID, tenant ID, subscription ID and Key Vault name are non-secret configuration
+in the YAML. The application reads its DB credentials directly through AKS
+Workload Identity + Key Vault CSI; the pipeline does not fetch Key Vault
+secrets.
+
+The first deployment uses the ACR private endpoint while public access remains
+enabled. Disable public access only after both agent VMs resolve the registry
+to its private IP and a push/pull test succeeds.
