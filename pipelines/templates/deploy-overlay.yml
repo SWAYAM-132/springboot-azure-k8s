@@ -5,7 +5,9 @@ parameters:
     type: string
   - name: dependsOn
     type: object
-  - name: azureServiceConnection
+  - name: agentPool
+    type: string
+  - name: azureClientId
     type: string
   - name: overlay
     type: string
@@ -21,88 +23,77 @@ parameters:
     type: string
 
 stages:
-  - stage: ${{ parameters.stageName }}
-    displayName: ${{ parameters.displayName }}
-    dependsOn: ${{ parameters.dependsOn }}
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/dev'))
-    variables:
-      imageDigest: $[ stageDependencies.Build.BuildAndPush.outputs['PublishImage.imageDigest'] ]
-    jobs:
-      - deployment: DeployOverlay
-        displayName: Apply ${{ parameters.overlay }} Kustomize overlay
-        environment: ${{ parameters.adoEnvironment }}
-        pool:
-          name: $(deployAgentPool)
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - checkout: self
-                  clean: true
-                - task: AzureCLI@2
-                  displayName: Deploy, verify rollout and check ready replicas
-                  inputs:
-                    azureSubscription: ${{ parameters.azureServiceConnection }}
-                    scriptType: bash
-                    scriptLocation: inlineScript
-                    inlineScript: |
-                      set -euo pipefail
-                      IMAGE_DIGEST="$(imageDigest)"
-                      [[ "${IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]
-                      IMAGE="$(acrName).azurecr.io/$(imageRepository)@${IMAGE_DIGEST}"
-                      OVERLAY="$(Build.SourcesDirectory)/k8s/overlays/${{ parameters.overlay }}"
+- stage: ${{ parameters.stageName }}
+  displayName: ${{ parameters.displayName }}
+  dependsOn: ${{ parameters.dependsOn }}
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/dev'))
+  variables:
+    imageDigest: $[ stageDependencies.Build.BuildAndPush.outputs['PublishImage.imageDigest'] ]
+  jobs:
+  - deployment: DeployOverlay
+    displayName: Apply ${{ parameters.overlay }} Kustomize overlay
+    environment: ${{ parameters.adoEnvironment }}
+    pool:
+      name: ${{ parameters.agentPool }}
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+            clean: true
+          - bash: |
+              set -euo pipefail
+              az login --identity --client-id "${{ parameters.azureClientId }}" --output none
+              az account set --subscription "$(AZURE_SUBSCRIPTION_ID)"
 
-                      az aks get-credentials \
-                        --resource-group "${{ parameters.aksResourceGroup }}" \
-                        --name "${{ parameters.aksCluster }}" \
-                        --overwrite-existing
-                      if ! command -v kubectl >/dev/null 2>&1 || ! command -v kubelogin >/dev/null 2>&1; then
-                        az aks install-cli \
-                          --install-location /usr/local/bin/kubectl \
-                          --kubelogin-install-location /usr/local/bin/kubelogin
-                      fi
-                      kubelogin convert-kubeconfig -l azurecli
+              IMAGE_DIGEST="$(imageDigest)"
+              [[ "${IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]
+              IMAGE="$(acrName).azurecr.io/$(imageRepository)@${IMAGE_DIGEST}"
+              OVERLAY="$(Build.SourcesDirectory)/k8s/overlays/${{ parameters.overlay }}"
 
-                      for value in "${ENTRA_TENANT_ID}" "${ENTRA_SPA_CLIENT_ID}" \
-                          "${TODO_API_AUDIENCE}" "${TODO_API_SCOPE}" \
-                          "${WORKLOAD_IDENTITY_CLIENT_ID}" "${KEYVAULT_NAME}"; do
-                        test -n "${value}"
-                      done
-                      command -v envsubst >/dev/null 2>&1
+              az aks get-credentials \
+                --resource-group "${{ parameters.aksResourceGroup }}" \
+                --name "${{ parameters.aksCluster }}" \
+                --overwrite-existing
+              kubelogin convert-kubeconfig -l azurecli
 
-                      kubectl -n "${{ parameters.namespace }}" create configmap todo-api-auth \
-                        --from-literal=entraTenantId="${ENTRA_TENANT_ID}" \
-                        --from-literal=entraSpaClientId="${ENTRA_SPA_CLIENT_ID}" \
-                        --from-literal=apiAudience="${TODO_API_AUDIENCE}" \
-                        --from-literal=apiScope="${TODO_API_SCOPE}" \
-                        --dry-run=client -o yaml | kubectl apply -f -
+              for value in "$(tenantId)" "$(entraSpaClientId)" "$(todoApiAudience)" \
+                  "$(todoApiScope)" "$(workloadIdentityClientId)" "$(keyVaultName)"; do
+                test -n "${value}"
+                [[ "${value}" != REPLACE_WITH_* ]]
+              done
 
-                      MANIFEST="$(mktemp)"
-                      TRANSFORMED="$(mktemp)"
-                      trap 'rm -f "${MANIFEST}" "${TRANSFORMED}"' EXIT
-                      kubectl kustomize "${OVERLAY}" \
-                        | envsubst '${WORKLOAD_IDENTITY_CLIENT_ID} ${KEYVAULT_NAME} ${AZURE_TENANT_ID}' \
-                        > "${MANIFEST}"
-                      IMAGE_LINE='        image: acrtodoplatformci.azurecr.io/todo-api:latest'
-                      test "$(grep -Fxc "${IMAGE_LINE}" "${MANIFEST}")" = 1
-                      sed "s|${IMAGE_LINE}|        image: ${IMAGE}|" "${MANIFEST}" > "${TRANSFORMED}"
-                      grep -Fq "image: ${IMAGE}" "${TRANSFORMED}"
-                      kubectl apply -f "${TRANSFORMED}"
-                      kubectl -n "${{ parameters.namespace }}" rollout status \
-                        deployment/todo-api --timeout=180s
+              kubectl -n "${{ parameters.namespace }}" create configmap todo-api-auth \
+                --from-literal=entraTenantId="$(tenantId)" \
+                --from-literal=entraSpaClientId="$(entraSpaClientId)" \
+                --from-literal=apiAudience="$(todoApiAudience)" \
+                --from-literal=apiScope="$(todoApiScope)" \
+                --dry-run=client -o yaml | kubectl apply -f -
 
-                      DEPLOYED_IMAGE="$(kubectl -n "${{ parameters.namespace }}" get deployment todo-api \
-                        -o jsonpath='{.spec.template.spec.containers[?(@.name=="todo-api")].image}')"
-                      test "${DEPLOYED_IMAGE}" = "${IMAGE}"
-                      READY_REPLICAS="$(kubectl -n "${{ parameters.namespace }}" get deployment todo-api \
-                        -o jsonpath='{.status.readyReplicas}')"
-                      test "${READY_REPLICAS}" = "${{ parameters.replicas }}"
-                      kubectl -n "${{ parameters.namespace }}" get pods -l app=todo-api
-                  env:
-                    ENTRA_TENANT_ID: $(entraTenantId)
-                    ENTRA_SPA_CLIENT_ID: $(entraSpaClientId)
-                    TODO_API_AUDIENCE: $(todoApiAudience)
-                    TODO_API_SCOPE: $(todoApiScope)
-                    AZURE_TENANT_ID: $(entraTenantId)
-                    WORKLOAD_IDENTITY_CLIENT_ID: $(workloadIdentityClientId)
-                    KEYVAULT_NAME: $(keyVaultName)
+              MANIFEST="$(mktemp)"
+              TRANSFORMED="$(mktemp)"
+              trap 'rm -f "${MANIFEST}" "${TRANSFORMED}"' EXIT
+              kubectl kustomize "${OVERLAY}" \
+                | envsubst '${WORKLOAD_IDENTITY_CLIENT_ID} ${KEYVAULT_NAME} ${AZURE_TENANT_ID}' \
+                > "${MANIFEST}"
+
+              IMAGE_LINE='        image: acrtodoplatformci.azurecr.io/todo-api:latest'
+              test "$(grep -Fxc "${IMAGE_LINE}" "${MANIFEST}")" = 1
+              sed "s|${IMAGE_LINE}|        image: ${IMAGE}|" "${MANIFEST}" > "${TRANSFORMED}"
+              grep -Fq "image: ${IMAGE}" "${TRANSFORMED}"
+              kubectl apply -f "${TRANSFORMED}"
+              kubectl -n "${{ parameters.namespace }}" rollout status deployment/todo-api --timeout=180s
+
+              DEPLOYED_IMAGE="$(kubectl -n "${{ parameters.namespace }}" get deployment todo-api \
+                -o jsonpath='{.spec.template.spec.containers[?(@.name=="todo-api")].image}')"
+              test "${DEPLOYED_IMAGE}" = "${IMAGE}"
+              READY_REPLICAS="$(kubectl -n "${{ parameters.namespace }}" get deployment todo-api \
+                -o jsonpath='{.status.readyReplicas}')"
+              test "${READY_REPLICAS}" = "${{ parameters.replicas }}"
+              kubectl -n "${{ parameters.namespace }}" get pods -l app=todo-api
+            displayName: Managed identity deployment and rollout validation
+            env:
+              AZURE_SUBSCRIPTION_ID: '5282ac61-9692-4758-b6cd-1d6a859625a2'
+              WORKLOAD_IDENTITY_CLIENT_ID: $(workloadIdentityClientId)
+              KEYVAULT_NAME: $(keyVaultName)
+              AZURE_TENANT_ID: $(tenantId)
