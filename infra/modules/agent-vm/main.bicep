@@ -10,6 +10,8 @@ param subnetId string
 param identityResourceId string
 @description('VM size.')
 param vmSize string = 'Standard_B2s'
+@description('SSH public key for the local agent administrator.')
+param sshPublicKey string
 @description('Resource tags.')
 param tags object = {}
 
