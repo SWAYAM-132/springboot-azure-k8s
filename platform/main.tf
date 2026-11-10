@@ -13,20 +13,14 @@ variable "azuredevops_org_url" {
   description = "Existing Azure DevOps organisation URL."
 }
 
-variable "azuredevops_pat" {
-  type        = string
-  sensitive   = true
-  description = "Bootstrap PAT used only by Terraform to manage agent pools and environments."
-}
-
 variable "project_name" {
   type    = string
   default = "SpringBoot-Azure-Deployment"
 }
 
 provider "azuredevops" {
-  org_service_url       = var.azuredevops_org_url
-  personal_access_token = var.azuredevops_pat
+  org_service_url = var.azuredevops_org_url
+  use_cli         = true
 }
 
 data "azuredevops_project" "existing" {
