@@ -50,6 +50,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
       vmSize: vmSize
     }
     osProfile: {
+      customData: base64(loadTextContent('./cloud-init.yaml'))
       computerName: vmName
       adminUsername: 'azureagent'
       linuxConfiguration: {
