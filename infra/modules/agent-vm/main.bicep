@@ -9,7 +9,7 @@ param subnetId string
 @description('Existing user-assigned managed identity resource ID.')
 param identityResourceId string
 @description('VM size.')
-param vmSize string = 'Standard_B2s'
+param vmSize string = 'Standard_B2s_v2'
 @description('SSH public key for the local agent administrator.')
 param sshPublicKey string
 @description('Resource tags.')
