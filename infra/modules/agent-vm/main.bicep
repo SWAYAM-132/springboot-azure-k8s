@@ -58,7 +58,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
           publicKeys: [
             {
               path: '/home/azureagent/.ssh/authorized_keys'
-              keyData: '<REPLACE_WITH_SSH_PUBLIC_KEY>'
+              keyData: sshPublicKey
             }
           ]
         }
