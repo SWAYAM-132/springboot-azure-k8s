@@ -9,7 +9,7 @@ param nonprodIdentityName string = 'id-todo-ado-ci'
 param prodIdentityName string = 'id-todo-ado-prod-ci'
 @secure()
 param sshPublicKey string
-param vmSize string = 'Standard_B2s'
+param vmSize string = 'Standard_B2s_v2'
 
 resource networkRg 'Microsoft.Resources/resourceGroups@2024-03-01' existing = {
   name: networkResourceGroupName
