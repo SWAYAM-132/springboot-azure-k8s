@@ -15,6 +15,9 @@ REMOTE_START=$(cat <<EOF
 set -euo pipefail
 sudo -u azureagent bash -lc '
   cd /opt/ado-agent
+  if [[ ! -x ./config.sh ]]; then
+    curl -fsSL https://vstsagentpackage.azureedge.net/agent/5.281.1/vsts-agent-linux-x64-5.281.1.tar.gz | tar -xz
+  fi
   nohup ./config.sh --unattended \
     --url "$ORG_URL" --auth AAD --pool "$AGENT_POOL" \
     --agent "$AGENT_NAME" --work _work --replace --acceptTeeEula \
