@@ -44,7 +44,7 @@ stages:
           - bash: |
               set -euo pipefail
               az login --identity --client-id "${{ parameters.azureClientId }}" --output none
-              az account set --subscription "$(AZURE_SUBSCRIPTION_ID)"
+              az account set --subscription "$AZURE_SUBSCRIPTION_ID"
 
               IMAGE_DIGEST="$(imageDigest)"
               [[ "${IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]
