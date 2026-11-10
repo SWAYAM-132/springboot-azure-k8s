@@ -336,24 +336,23 @@ Azure default outbound rules apply; inbound is not opened.
 ### 3. Create Azure DevOps pools/environments
 
 Terraform in `platform/` creates the two organisation-level pools, project
-queues, environments, and Stage/Prod approval checks. The Terraform bootstrap
-uses an Azure DevOps PAT only to administer Azure DevOps metadata; it is not
-stored in the repository or passed to application pipelines.
+queues, environments, and Stage/Prod approval checks. The Terraform bootstrap uses the signed-in Azure CLI identity (no PAT or
+service connection). The signed-in user must have permission to manage the
+project's agent pools and environments.
 
 ```sh
 cd platform
 terraform init
 export AZDO_ORG_SERVICE_URL="https://dev.azure.com/swayam-cloud-lab"
-export AZDO_PERSONAL_ACCESS_TOKEN="<short-lived PAT with required ADO scopes>"
 export TF_VAR_azuredevops_org_url="$AZDO_ORG_SERVICE_URL"
-export TF_VAR_azuredevops_pat="$AZDO_PERSONAL_ACCESS_TOKEN"
 export TF_VAR_approval_user_principal_name="<ADO approver sign-in>"
+az login
 terraform plan
 terraform apply
 ```
 
-Use a short-lived PAT with agent-pool management, environment management,
-approvals/checks and project read scopes. Remove it from the shell after use.
+Terraform uses the Azure CLI signed-in identity. No PAT is stored in Terraform
+state or passed to the provider.
 
 ### 4. Register each VM agent
 
@@ -365,10 +364,11 @@ Run `scripts/install-ado-agent.sh` as the `azureagent` user with:
 - prod VM: `ADO_ORG_URL=https://dev.azure.com/swayam-cloud-lab`,
   `ADO_AGENT_POOL=todo-vnet-agent-prod`
 
-The script prompts for a short-lived PAT with Agent Pools (read/manage)
-permission. The PAT is not saved in the repository, pipeline variables, or
-cloud-init. Revoke it after both agents register. Agent jobs use the VM's
-attached managed identity, not this registration PAT.
+The script uses Entra device-code authentication. Complete the displayed
+device login in your browser with an account that is an administrator of the
+target agent pool. No PAT or client secret is stored on the VM. This
+registration identity is used only to register the agent; pipeline jobs use
+the VM's attached managed identity for Azure resource access.
 
 ### 5. Bootstrap namespaces and namespace-scoped AKS permissions
 
