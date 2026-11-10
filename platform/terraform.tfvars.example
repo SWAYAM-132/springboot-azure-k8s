@@ -1,0 +1,3 @@
+azuredevops_org_url = "https://dev.azure.com/swayam-cloud-lab"
+project_name         = "SpringBoot-Azure-Deployment"
+# Supply azuredevops_pat through TF_VAR_azuredevops_pat in your shell.
