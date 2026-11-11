@@ -549,7 +549,7 @@
 
         document.getElementById("status-filter").addEventListener("change", () => {
             currentPage = 0;
-            initializeAuth();
+            loadTodos();
         });
         document.getElementById("refresh-button").addEventListener("click", loadTodos);
         document.getElementById("previous-button").addEventListener("click", () => {
@@ -561,7 +561,7 @@
         document.getElementById("close-dialog").addEventListener("click", () => editDialog.close());
         document.getElementById("cancel-edit").addEventListener("click", () => editDialog.close());
 
-        loadTodos();
+        initializeAuth();
     </script>
 </body>
 </html>

@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -125,6 +126,12 @@ class TodoApplicationTests {
         var owner = jwt().jwt(token -> token.claim("tid", "tenant-query").claim("oid", "user-query"));
         mockMvc.perform(get("/api/todos/9223372036854775807").with(owner))
                 .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/todos/9223372036854775807")
+                        .with(owner)
+                        .accept(MediaType.TEXT_HTML))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.status").value(404));
         mockMvc.perform(get("/api/todos?sort=notAProperty").with(owner))
                 .andExpect(status().isBadRequest());
         mockMvc.perform(get("/api/todos?page=10000&size=100").with(owner))
