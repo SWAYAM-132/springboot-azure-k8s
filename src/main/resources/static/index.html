@@ -271,7 +271,7 @@
                 if (!authConfig.tenantId || !authConfig.clientId || !authConfig.apiScope || !window.msal) {
                     throw new Error("Entra sign-in is not configured for this application.");
                 }
-                msalApp = new msal.PublicClientApplication({
+                msalApp = new window.msal.PublicClientApplication({
                     auth: {
                         clientId: authConfig.clientId,
                         authority: `https://login.microsoftonline.com/${encodeURIComponent(authConfig.tenantId)}`,
@@ -306,7 +306,7 @@
             try {
                 return (await msalApp.acquireTokenSilent(request)).accessToken;
             } catch (error) {
-                if (error instanceof msal.InteractionRequiredAuthError) {
+                if (error instanceof window.msal.InteractionRequiredAuthError) {
                     return (await msalApp.acquireTokenPopup(request)).accessToken;
                 }
                 throw error;
